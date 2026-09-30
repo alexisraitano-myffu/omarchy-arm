@@ -59,7 +59,8 @@ Options:
   --link             Point the target at this checkout with a symlink instead
                      of copying it, for working on the fork itself
   --profile NAME     Override hardware detection: apple-silicon,
-                     raspberry-pi-5, raspberry-pi or generic-aarch64
+                     raspberry-pi-5, raspberry-pi, cix-sky1 or
+                     generic-aarch64
   -h, --help         Show this message
 USAGE
 }
@@ -174,6 +175,11 @@ esac
 command -v pacman >/dev/null || die "pacman is not installed; this is not an Arch-based system."
 command -v sudo >/dev/null || die "sudo is not installed."
 
+# A vendor kernel without Landlock (the CIX Sky1 kernel, for one) makes every
+# pacman download fail in its sandbox. Settle that before the first pacman call.
+source "$CHECKOUT/install/arm/kernel-capabilities.sh"
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_pacman_without_landlock
+
 # A pacstrapped Arch Linux ARM system can arrive without its own keyring, in
 # which case every single package below would fail verification. Catch it here
 # rather than 200 signature errors into the install.
@@ -199,6 +205,10 @@ case "$platform" in
   raspberry-pi)
     ok "Platform: Raspberry Pi (pre-5)"
     warn "Only the Pi 5 is tested. Older Pis have no Vulkan-capable GPU for Hyprland."
+    ;;
+  cix-sky1)
+    ok "Platform: CIX Sky1 (Minisforum MS-R1, Radxa Orion O6)"
+    warn "On the vendor kernel the Mali GPU has no Mesa driver; Hyprland renders in software."
     ;;
   generic-aarch64)
     ok "Platform: generic aarch64 (virtual machine or unrecognised board)"
@@ -429,6 +439,13 @@ step "Shipped defaults for $USER"
 # already existed, so the defaults have to be copied in explicitly.
 source "$CHECKOUT/install/arm/seed-home.sh"
 OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_seed_home "$HOME"
+
+########################################################################
+step "Kernel capabilities"
+########################################################################
+
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_zram_absent
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_iptables_for_kernel
 
 ########################################################################
 step "System setup"

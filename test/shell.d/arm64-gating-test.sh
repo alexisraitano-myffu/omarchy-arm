@@ -38,7 +38,7 @@ for leaf in "${x86_only[@]}"; do
 done
 pass "every x86-only hardware leaf is gated"
 
-for leaf in hardware/arm/vulkan.sh hardware/arm/apple-silicon.sh hardware/arm/raspberry-pi.sh; do
+for leaf in hardware/arm/vulkan.sh hardware/arm/apple-silicon.sh hardware/arm/raspberry-pi.sh hardware/arm/cix-sky1.sh; do
   grep -q "run_logged_arm \"\$OMARCHY_INSTALL/$leaf\"" "$all" ||
     fail "$leaf runs on aarch64 only"
   [[ -f $ROOT/install/$leaf ]] || fail "$leaf exists"

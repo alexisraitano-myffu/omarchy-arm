@@ -223,13 +223,15 @@ ARM.
 
 ### Platform detection
 
-Four commands, reading the flattened device tree at `/proc/device-tree`:
+Five commands, reading the flattened device tree at `/proc/device-tree`,
+and on ACPI-only aarch64 machines the platform devices the firmware names:
 
 ```bash
-omarchy hw platform            # apple-silicon | raspberry-pi-5 | raspberry-pi | generic-aarch64 | x86_64
+omarchy hw platform            # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | generic-aarch64 | x86_64
 omarchy hw aarch64
 omarchy hw apple silicon
 omarchy hw raspberry pi [--5]
+omarchy hw cix sky1
 ```
 
 They cost nothing to call, work before any package is installed, and are what
@@ -395,6 +397,43 @@ What the board confirmed rather than found:
   replaced none, which is the home-seeding fix behaving on hardware
 - after a reboot: `systemctl --failed` empty, `ufw` active with SSH open,
   SDDM running
+
+## What the CIX Sky1 (Minisforum MS-R1) added
+
+The MS-R1 is a 12-core Armv9 desktop (CIX CP8180: eight Cortex-A720, four
+A520, a Mali-G720, 32 GB) sold with the vendor's Debian 12. Its firmware is
+UEFI with ACPI only -- there is no `/proc/device-tree` -- and the only kernel
+with working NIC, NVMe, USB, display and GPU today is the vendor's
+6.6.10-cix. So the Arch root runs on that kernel: the vendor `Image` and
+initramfs boot from the ESP through a separate EFI entry with
+`root=PARTUUID=` pointing at the Arch partition, and the vendor's
+`/lib/modules/6.6.10-cix-build-generic` and firmware are copied in.
+Everything below is that kernel meeting stock Arch and Omarchy.
+
+| | |
+|---|---|
+| Platform detection saw `generic-aarch64` | with no device tree the board never reached a case. The Sky1 is now matched by the `cix,sky1` compatible when booted with a device tree, and on ACPI by its display engines (`CIXH5010:*` under `/sys/bus/platform/devices`) |
+| `pacman -Syu` failed in its sandbox | "restricting filesystem access failed because Landlock is not supported by the kernel". The vendor kernel has no Landlock LSM. `install/arm/kernel-capabilities.sh` turns on `DisableSandboxFilesystem` and `DisableSandboxSyscalls` when `landlock` is missing from `/sys/kernel/security/lsm`, before the keyring step's first pacman call |
+| ufw could not load a rule | `iptables v1.8.13 (nf_tables): Could not fetch rule set generation id`. The kernel has `CONFIG_IP_NF_IPTABLES=y` but no nf_tables, and Arch's `iptables` is the nft backend. The capabilities step swaps in `iptables-legacy` when the kernel config says so, and sets `IPV6=no` for ufw when IPv6 iptables is missing too |
+| Boot waited 90 s, twice | `Timed out waiting for device /dev/zram0`: no zram in the kernel (`CONFIG_ZRAM` is not set). The step writes an `/etc/systemd/zram-generator.conf.d/90-omarchy.conf` override with no device when the config says zram is absent. Userspace startup went from 3 min 2 s to 3.8 s |
+| Hyprland aborted before its first frame, SDDM's greeter included | `MESA-EGL: warning: egl: failed to create dri2 screen` on every card, then SIGABRT. The displays are `linlondp` KMS devices (one DRM card per output) and the GPU is the proprietary `mali_kbase`; Mesa drives neither. `install/hardware/arm/cix-sky1.sh` puts `LIBGL_ALWAYS_SOFTWARE=1` in `/etc/environment` (pam_env reaches the greeter and the session) unless `panthor` is loaded, and `vulkan.sh` installs `vulkan-swrast` |
+| `setcap` fails | the vendor kernel's ext4 has no security xattrs, so `newuidmap`, `gst-ptp-helper`, `gsr-kms-server` and `gvfsd-nfs` install without capabilities. Not fixed here: it is the kernel's to fix |
+
+What the board confirmed:
+
+- `omarchy-hw-platform` answers `cix-sky1` on the real ACPI tables
+- Hyprland, Quickshell and the SDDM greeter run on llvmpipe at 3840x2160
+  (the DP output runs at 30 Hz at 4K); the desktop idles at a load under 2
+- after a reboot: userspace in under 4 s, `systemctl --failed` empty, ufw
+  active with SSH open, SDDM running
+- 20 minutes of `stress-ng` on all 12 cores with 60% of RAM in use left no
+  kernel errors
+
+The open path to a GPU-accelerated desktop is a newer kernel: the Sky1-Linux
+community kernels (6.18 LTS, 7.0) carry `panthor` and the display drivers,
+and Mesa then drives the Mali-G720 itself. Nothing in this fork needs to
+change for that; the software-rendering switch steps aside when `panthor` is
+loaded.
 
 ## Validated on an aarch64 machine
 
