@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# omarchy:summary=Apply the kernel side of the active power profile where power-profiles-daemon has no driver for it
+# omarchy:args=[power-saver|balanced|performance]
+# omarchy:hidden=true
+# omarchy:requires-sudo=true
+
+# power-profiles-daemon changes the CPU's behaviour through EPP (intel_pstate,
+# amd-pstate) and ACPI platform_profile. An aarch64 machine has neither: ppd
+# loads only its placeholder driver, offers balanced and power-saver, and
+# switching between them changes nothing at all. This fills that gap for the
+# power-saver profile with knobs every Linux machine has:
+#
+#   - cpufreq boost off (the boost operating points cost the most per unit of
+#     work; with ppd's CPU driver missing nothing else lowers them)
+#   - PCIe ASPM policy powersupersave (L1 substates), when ASPM is enabled
+#   - Wi-Fi power save on (Omarchy turns it off in NetworkManager)
+#
+# The values found before power-saver are saved and put back when the profile
+# changes again, so balanced keeps whatever the platform set at boot (boost on
+# a CIX Sky1 included). Runs as root from omarchy-powerprofiles-tune.service,
+# which a path unit starts whenever ppd writes its state file.
+#
+# Test seams: OMARCHY_PPD_STATE, OMARCHY_SYS_CPUFREQ, OMARCHY_SYS_PCIE_ASPM,
+# OMARCHY_SYS_NET, OMARCHY_POWERPROFILES_RUN_DIR.
+
+ppd_state="${OMARCHY_PPD_STATE:-/var/lib/power-profiles-daemon/state.ini}"
+sys_cpufreq="${OMARCHY_SYS_CPUFREQ:-/sys/devices/system/cpu/cpufreq}"
+sys_aspm="${OMARCHY_SYS_PCIE_ASPM:-/sys/module/pcie_aspm/parameters/policy}"
+sys_net="${OMARCHY_SYS_NET:-/sys/class/net}"
+run_dir="${OMARCHY_POWERPROFILES_RUN_DIR:-/run/omarchy/powerprofiles}"
+
+state_value() {
+  sed -n "s/^$1=//p" "$ppd_state" 2>/dev/null | head -n 1
+}
+
+profile="${1:-$(state_value Profile)}"
+[[ -n $profile ]] || profile=$(powerprofilesctl get 2>/dev/null)
+
+case "$profile" in
+  power-saver | balanced | performance) ;;
+  *)
+    echo "Unknown power profile: ${profile:-none}" >&2
+    exit 1
+    ;;
+esac
+
+mkdir -p "$run_dir"
+
+# Remember a value the first time power-saver changes it, so a second
+# power-saver run does not overwrite the original with its own setting.
+save_once() {
+  local name="$1" value="$2"
+  [[ -e $run_dir/$name ]] || printf '%s\n' "$value" >"$run_dir/$name"
+}
+
+take_saved() {
+  local name="$1"
+  [[ -r $run_dir/$name ]] || return 1
+  cat "$run_dir/$name"
+  rm -f "$run_dir/$name"
+}
+
+aspm_current() {
+  sed -n 's/.*\[\(.*\)\].*/\1/p' "$sys_aspm" 2>/dev/null
+}
+
+wifi_devices() {
+  local dev
+  for dev in "$sys_net"/*; do
+    [[ -e $dev/phy80211 ]] && basename "$dev"
+  done
+}
+
+wifi_power_save() {
+  iw dev "$1" get power_save 2>/dev/null | sed -n 's/^Power save: //p'
+}
+
+# ppd drives the CPU itself when it found a CPU driver; leave boost to it then.
+cpu_is_ours() {
+  [[ -z $(state_value CpuDriver) ]]
+}
+
+power_saver() {
+  if cpu_is_ours && [[ -w $sys_cpufreq/boost ]]; then
+    save_once boost "$(<"$sys_cpufreq/boost")"
+    echo 0 >"$sys_cpufreq/boost"
+  fi
+
+  local aspm
+  aspm=$(aspm_current)
+  if [[ -n $aspm && $aspm != "powersupersave" ]]; then
+    # The kernel refuses the write when ASPM was turned off at boot.
+    if { echo powersupersave >"$sys_aspm"; } 2>/dev/null; then
+      save_once aspm "$aspm"
+    fi
+  fi
+
+  local dev current
+  for dev in $(wifi_devices); do
+    current=$(wifi_power_save "$dev")
+    [[ -n $current ]] || continue
+    save_once "wifi-$dev" "$current"
+    [[ $current == "on" ]] || iw dev "$dev" set power_save on 2>/dev/null
+  done
+  return 0
+}
+
+restore() {
+  local value
+  if value=$(take_saved boost); then
+    echo "$value" >"$sys_cpufreq/boost"
+  fi
+
+  if value=$(take_saved aspm); then
+    { echo "$value" >"$sys_aspm"; } 2>/dev/null
+  fi
+
+  local saved dev
+  for saved in "$run_dir"/wifi-*; do
+    [[ -e $saved ]] || continue
+    dev=${saved##*/wifi-}
+    value=$(take_saved "wifi-$dev")
+    [[ -e $sys_net/$dev ]] && iw dev "$dev" set power_save "$value" 2>/dev/null
+  done
+  return 0
+}
+
+if [[ $profile == "power-saver" ]]; then
+  power_saver
+else
+  restore
+fi

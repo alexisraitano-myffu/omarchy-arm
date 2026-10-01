@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch the power profile for omarchy-powerprofiles-tune
+
+[Path]
+# power-profiles-daemon rewrites this file on every profile change.
+PathChanged=/var/lib/power-profiles-daemon/state.ini
+Unit=omarchy-powerprofiles-tune.service
+
+[Install]
+WantedBy=paths.target

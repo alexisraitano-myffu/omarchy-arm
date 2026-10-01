@@ -1,0 +1,10 @@
+[Unit]
+Description=Apply the kernel side of the active power profile
+After=power-profiles-daemon.service systemd-tmpfiles-setup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/omarchy-powerprofiles-tune
+
+[Install]
+WantedBy=multi-user.target
