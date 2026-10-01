@@ -30,6 +30,16 @@ The directory `~/Windows` in your home directory is automatically shared with th
 
 The VM's ports are bound to localhost only, so nothing on your network can reach the Windows machine.
 
+## On ARM
+
+On a 64-bit ARM machine the same installer gives you Windows 11 on Arm, the build Microsoft ships for Snapdragon laptops. It runs ARM64 programs natively and x64 programs through Windows' own Prism emulator, so most ordinary Windows software installs and runs as it would on such a laptop, only without its GPU.
+
+A few things differ from x86:
+
+- On a big.LITTLE CPU (performance and efficiency cores) the VM is pinned to the fastest group of identical cores, and the installer only offers that many. A VM cannot move between core types.
+- Some vendor ARM kernels lack the `xt_nat` netfilter module that Docker needs to publish a port on `127.0.0.1`. On those the VM gets the container's own address instead (`omarchy windows vm status` prints it), which only this computer can reach.
+- Graphics are software-rendered (Microsoft Basic Render Driver). x64 programs that need modern OpenGL get OpenGL 4.6 on top of that, still in software, from Microsoft's "OpenCL, OpenGL, and Vulkan Compatibility Pack" in the Store (`winget install 9NQPSL29BFFF`).
+
 ## Limits and licensing
 
 There's no GPU passthrough with this setup, so it's not suitable for gaming or video editing. It's a great way to run Microsoft Office or whatever else you absolutely must have.

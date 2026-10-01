@@ -96,7 +96,10 @@ Work down this order, and stop at the first that holds:
 Two categories are permanently out, not merely missing: anything under
 `[multilib]`, which does not exist on aarch64, and the Windows compatibility
 stack, since Arch Linux ARM ships no wine. Steam, Lutris with wine, Heroic and
-Battle.net belong to that group.
+Battle.net belong to that group. For a Windows desktop program that must run,
+offer the Windows VM instead (`omarchy windows vm install`): on ARM it installs
+Windows 11 on Arm under KVM, whose Prism emulator runs x64 programs. It has no
+GPU acceleration, so it suits office work and light CAD, not games.
 
 ### Package names that differ
 

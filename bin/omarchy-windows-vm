@@ -5,22 +5,104 @@
 # omarchy:requires-sudo=true
 
 COMPOSE_FILE="$HOME/.config/windows/docker-compose.yml"
+KVM_DEVICE="${OMARCHY_KVM_DEVICE:-/dev/kvm}"
+CPU_SYSFS="${OMARCHY_CPU_SYSFS:-/sys/devices/system/cpu}"
+KERNEL_CAPABILITIES="${OMARCHY_PATH:-/usr/share/omarchy}/install/arm/kernel-capabilities.sh"
+
+# On aarch64 the dockurr/windows image is the dockur/windows-arm build, so the
+# same compose file installs Windows 11 on Arm, which runs x64 programs through
+# its own Prism emulator. The differences that matter here are below.
+
+# A big.LITTLE CPU has cores with different ID registers, and a "-cpu host"
+# guest cannot have its vCPUs move between them. The image therefore pins QEMU
+# to the fastest group of identical cores and lowers CPU_CORES to that group's
+# size, so offering more cores than that would be silently ignored.
+windows_vm_max_cores() {
+  local total
+  total=$(nproc)
+
+  if ! omarchy-hw-aarch64; then
+    echo "$total"
+    return
+  fi
+
+  local dir capacity midr best_capacity=-1 best_midr="" count=0
+  local -a midrs=()
+  for dir in "$CPU_SYSFS"/cpu[0-9]*; do
+    [[ -r $dir/cpu_capacity && -r $dir/regs/identification/midr_el1 ]] || continue
+    capacity=$(<"$dir/cpu_capacity")
+    midr=$(<"$dir/regs/identification/midr_el1")
+    midrs+=("$midr")
+    if (( capacity > best_capacity )); then
+      best_capacity=$capacity
+      best_midr=$midr
+    fi
+  done
+
+  if [[ -z $best_midr ]]; then
+    echo "$total"
+    return
+  fi
+
+  for midr in "${midrs[@]}"; do
+    [[ $midr == "$best_midr" ]] && count=$((count + 1))
+  done
+  echo "$count"
+}
+
+# Docker publishes a port through an iptables DNAT rule. A kernel without
+# xt_nat (CONFIG_NETFILTER_XT_NAT, missing from some vendor ARM kernels)
+# rejects the rule and the container never starts. Docker's embedded DNS on a
+# compose network is reached through DNAT too, so the image could not even
+# resolve Microsoft's download servers. On such a kernel the VM goes on the
+# default bridge with no published ports, and the host, the only machine that
+# can route to it, connects to the container's own address.
+windows_vm_ports_publishable() {
+  omarchy-hw-aarch64 || return 0
+  [[ -r $KERNEL_CAPABILITIES ]] || return 0
+  source "$KERNEL_CAPABILITIES"
+  [[ $(omarchy_arm_kconfig CONFIG_NETFILTER_XT_NAT) != n ]]
+}
+
+# The address the VM answers on: localhost when its ports are published, the
+# container's bridge address otherwise.
+windows_vm_address() {
+  if grep -qx '    network_mode: bridge' "$COMPOSE_FILE" 2>/dev/null; then
+    docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' omarchy-windows 2>/dev/null
+  else
+    echo 127.0.0.1
+  fi
+}
 
 check_prerequisites() {
   local DISK_SIZE_GB=${1:-64}
   local REQUIRED_SPACE=$((DISK_SIZE_GB + 10))  # Add 10GB for Windows ISO and overhead
 
   # Check for KVM support
-  if [[ ! -e /dev/kvm ]]; then
-    gum style \
-      --border normal \
-      --padding "1 2" \
-      --margin "1" \
-      "❌ KVM virtualization not available!" \
-      "" \
-      "Please enable virtualization in BIOS or run:" \
-      "  sudo modprobe kvm-intel  # for Intel CPUs" \
-      "  sudo modprobe kvm-amd    # for AMD CPUs"
+  if [[ ! -e $KVM_DEVICE ]]; then
+    if omarchy-hw-aarch64; then
+      # ARM has no BIOS switch or vendor module: KVM is built into the kernel
+      # and needs the firmware to hand Linux the CPU at EL2.
+      gum style \
+        --border normal \
+        --padding "1 2" \
+        --margin "1" \
+        "❌ KVM virtualization not available!" \
+        "" \
+        "On ARM, KVM needs a kernel built with CONFIG_KVM" \
+        "and firmware that starts Linux at EL2." \
+        "See: sudo dmesg | grep -i kvm"
+    else
+      gum style \
+        --border normal \
+        --padding "1 2" \
+        --margin "1" \
+        "❌ KVM virtualization not available!" \
+        "" \
+        "Please enable virtualization in BIOS or run:" \
+        "  sudo modprobe kvm-intel  # for Intel CPUs" \
+        "  sudo modprobe kvm-amd    # for AMD CPUs"
+    fi
     exit 1
   fi
 
@@ -60,7 +142,7 @@ EOF
   # Get system resources
   TOTAL_RAM=$(free -h | awk 'NR==2 {print $2}')
   TOTAL_RAM_GB=$(awk 'NR==1 {printf "%d", $2/1024/1024}' /proc/meminfo)
-  TOTAL_CORES=$(nproc)
+  TOTAL_CORES=$(windows_vm_max_cores)
 
   echo ""
   echo "System Resources Detected:"
@@ -172,6 +254,27 @@ EOF
 
   mkdir -p $HOME/Windows
 
+  if windows_vm_ports_publishable; then
+    NETWORK_CONFIG="    ports:
+      - 127.0.0.1:8006:8006
+      - 127.0.0.1:3389:3389/tcp
+      - 127.0.0.1:3389:3389/udp"
+  else
+    NETWORK_CONFIG="    network_mode: bridge"
+  fi
+
+  # driftfix=slew belongs to the x86 RTC; QEMU's ARM virt machine warns and
+  # ignores it. The ARM image's default display is ramfb, which Windows can
+  # only drive at the firmware's 800x600; virtio-gpu gets the viogpudo driver
+  # from the image's driver set and any resolution.
+  RTC_ARGUMENTS="-rtc base=localtime,clock=host,driftfix=slew"
+  DISPLAY_CONFIG=""
+  if omarchy-hw-aarch64; then
+    RTC_ARGUMENTS="-rtc base=localtime,clock=host"
+    DISPLAY_CONFIG='
+      VGA: "virtio-gpu"'
+  fi
+
   # Create docker-compose.yml in user config directory
   cat << EOF | tee "$COMPOSE_FILE" > /dev/null
 services:
@@ -186,16 +289,13 @@ services:
       USERNAME: "$USERNAME"
       PASSWORD: "$PASSWORD"
       TZ: "$(timedatectl show -p Timezone --value 2>/dev/null || echo UTC)"
-      ARGUMENTS: "-rtc base=localtime,clock=host,driftfix=slew"
+      ARGUMENTS: "$RTC_ARGUMENTS"$DISPLAY_CONFIG
     devices:
       - /dev/kvm
       - /dev/net/tun
     cap_add:
       - NET_ADMIN
-    ports:
-      - 127.0.0.1:8006:8006
-      - 127.0.0.1:3389:3389/tcp
-      - 127.0.0.1:3389:3389/udp
+$NETWORK_CONFIG
     volumes:
       - $HOME/.windows:/storage
       - $HOME/Windows:/shared
@@ -206,8 +306,6 @@ EOF
   echo ""
   echo "Starting Windows VM installation..."
   echo "This will download a Windows 11 image (may take 10-15 minutes)."
-  echo ""
-  echo "Monitor installation progress at: http://127.0.0.1:8006"
   echo ""
 
   # Start docker-compose with user's config
@@ -221,6 +319,8 @@ EOF
     exit 1
   fi
 
+  VIEWER_URL="http://$(windows_vm_address):8006"
+
   echo ""
   echo "Windows VM is starting up!"
   echo ""
@@ -228,11 +328,11 @@ EOF
 
   # Open browser to monitor installation
   sleep 3
-  xdg-open "http://127.0.0.1:8006"
+  xdg-open "$VIEWER_URL"
 
   echo ""
   echo "Installation is running in the background."
-  echo "You can monitor progress at: http://127.0.0.1:8006"
+  echo "You can monitor progress at: $VIEWER_URL"
   echo ""
   echo "Once finished, launch 'Windows' via Super + Space"
   echo ""
@@ -364,7 +464,7 @@ To stop: omarchy-windows-vm stop"
   # If scale is less than 130%, don't set any scale (use default 100)
 
   # Connect with RDP in fullscreen (auto-detects resolution)
-  xfreerdp3 /u:"$WIN_USER" /p:"$WIN_PASS" /v:127.0.0.1:3389 -grab-keyboard /sound /microphone /clipboard /cert:ignore /title:"Windows VM - Omarchy" /dynamic-resolution /gfx:AVC444 /floatbar:sticky:off,default:visible,show:fullscreen $RDP_SCALE
+  xfreerdp3 /u:"$WIN_USER" /p:"$WIN_PASS" /v:"$(windows_vm_address)":3389 -grab-keyboard /sound /microphone /clipboard /cert:ignore /title:"Windows VM - Omarchy" /dynamic-resolution /gfx:AVC444 /floatbar:sticky:off,default:visible,show:fullscreen $RDP_SCALE
 
   # After RDP closes, stop the container unless --keep-alive was specified
   if [[ $KEEP_ALIVE = "false" ]]; then
@@ -410,8 +510,8 @@ status_windows() {
       --align left \
       "Windows VM Status: RUNNING" \
       "" \
-      "Web interface: http://127.0.0.1:8006" \
-      "RDP available: port 3389" \
+      "Web interface: http://$(windows_vm_address):8006" \
+      "RDP available: $(windows_vm_address):3389" \
       "" \
       "To connect: omarchy-windows-vm launch" \
       "To stop:    omarchy-windows-vm stop"
