@@ -444,6 +444,13 @@ source "$CHECKOUT/install/arm/firewall-ssh.sh"
 OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_keep_ssh_reachable
 
 ########################################################################
+step "Login screen"
+########################################################################
+
+source "$CHECKOUT/install/arm/login.sh"
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_seed_sddm_state "$USER"
+
+########################################################################
 step "User setup"
 ########################################################################
 
