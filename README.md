@@ -1,5 +1,8 @@
 # Omarchy on ARM64
 
+> [!IMPORTANT]
+> Upstream [Omarchy](https://github.com/basecamp/omarchy) now supports aarch64 natively on its `quattro` branch: Apple Silicon, Snapdragon laptops, NVIDIA N1x and GB10, and a generic `aarch64` platform for Raspberry Pis and ARM VMs. This fork is no longer actively developed and won't be maintained long-term. Please propose new ARM work, board support and fixes upstream.
+
 A fork of [Omarchy](https://omarchy.org) that installs on 64-bit ARM instead
 of x86_64: an Apple Silicon Mac, a Raspberry Pi 5, or an aarch64 virtual
 machine, all running Arch Linux ARM.
@@ -12,7 +15,7 @@ cd omarchy-arm
 ```
 
 It installs onto a machine that is already running Arch Linux ARM. Upstream
-installs from an x86_64 ISO and has no installer for a running system, so
+installs from an ISO and has no installer for a running system, so
 `install.sh` is new here; porting the ISO would need a bootloader story per
 board and is not done.
 
