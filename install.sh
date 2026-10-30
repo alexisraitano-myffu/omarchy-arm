@@ -422,6 +422,13 @@ source "$CHECKOUT/install/arm/keyboard.sh"
 OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_apply_keyboard
 
 ########################################################################
+step "Locale"
+########################################################################
+
+source "$CHECKOUT/install/arm/locale.sh"
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_apply_locale
+
+########################################################################
 step "Shipped defaults for $USER"
 ########################################################################
 
