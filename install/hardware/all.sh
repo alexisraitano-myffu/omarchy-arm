@@ -22,6 +22,7 @@ run_logged_arm "$OMARCHY_INSTALL/hardware/arm/vulkan.sh"
 run_logged_arm "$OMARCHY_INSTALL/hardware/arm/apple-silicon.sh"
 run_logged_arm "$OMARCHY_INSTALL/hardware/arm/raspberry-pi.sh"
 run_logged_arm "$OMARCHY_INSTALL/hardware/arm/power-profiles.sh"
+run_logged_arm "$OMARCHY_INSTALL/hardware/arm/cix-sky1.sh"
 
 run_logged_x86 "$OMARCHY_INSTALL/hardware/intel/video-acceleration.sh"
 run_logged_x86 "$OMARCHY_INSTALL/hardware/intel/lpmd.sh"

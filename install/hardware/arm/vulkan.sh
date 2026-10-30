@@ -14,6 +14,11 @@ case "$(omarchy-hw-platform)" in
     # V3DV, Mesa's Vulkan driver for VideoCore.
     omarchy_arm_pkg_add_available vulkan-broadcom
     ;;
+  cix-sky1)
+    # The vendor kernel drives the Mali-G720 with mali_kbase, which Mesa cannot
+    # use; the software rasterizer is the Vulkan device Hyprland gets.
+    omarchy_arm_pkg_add_available vulkan-swrast
+    ;;
   generic-aarch64)
     # A VM with no accelerated GPU: virtio-gpu with Venus, and the software
     # rasterizer as the fallback that keeps Hyprland able to start at all.

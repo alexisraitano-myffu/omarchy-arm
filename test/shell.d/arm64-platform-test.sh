@@ -22,8 +22,13 @@ fixture() {
   echo "$dir"
 }
 
+# ACPI platform devices: an empty directory unless a test names one, so the
+# host running the tests (which may itself be a Sky1) never leaks in.
+mkdir -p "$test_tmp/no-acpi"
+
 platform_of() {
-  OMARCHY_ARCH="${2:-aarch64}" OMARCHY_DEVICETREE="$1" omarchy-hw-platform
+  OMARCHY_ARCH="${2:-aarch64}" OMARCHY_DEVICETREE="$1" \
+    OMARCHY_PLATFORM_DEVICES="${3:-$test_tmp/no-acpi}" omarchy-hw-platform
 }
 
 pi5=$(fixture pi5 "raspberrypi,5-model-b brcm,bcm2712" "Raspberry Pi 5 Model B Rev 1.0")
@@ -51,6 +56,32 @@ pass "an aarch64 VM falls through to generic"
 [[ $(platform_of "$test_tmp/nonexistent") == "generic-aarch64" ]] ||
   fail "a machine with no device tree falls through to generic"
 pass "a machine with no device tree falls through to generic"
+
+# The CIX Sky1: its device tree when booted with one, and on ACPI-only
+# firmware (the Minisforum MS-R1) the CIXH5010 display engines the DSDT names.
+sky1_dt=$(fixture sky1_dt "radxa,orion-o6 cix,sky1" "Radxa Orion O6")
+[[ $(platform_of "$sky1_dt") == "cix-sky1" ]] || fail "a Sky1 is recognised from its device tree" "$(platform_of "$sky1_dt")"
+pass "a Sky1 is recognised from its device tree"
+
+acpi="$test_tmp/acpi-sky1"
+mkdir -p "$acpi/CIXH5010:00" "$acpi/CIXH5010:03" "$acpi/CIXH5000:00"
+[[ $(platform_of "$test_tmp/nonexistent" aarch64 "$acpi") == "cix-sky1" ]] ||
+  fail "an ACPI-only Sky1 (MS-R1) is recognised from its display engines"
+pass "an ACPI-only Sky1 (MS-R1) is recognised from its display engines"
+
+acpi_other="$test_tmp/acpi-other"
+mkdir -p "$acpi_other/ARMH0011:00" "$acpi_other/ARMHD620:00"
+[[ $(platform_of "$test_tmp/nonexistent" aarch64 "$acpi_other") == "generic-aarch64" ]] ||
+  fail "another ACPI machine still falls through to generic"
+pass "another ACPI machine still falls through to generic"
+
+OMARCHY_ARCH=aarch64 OMARCHY_DEVICETREE="$test_tmp/nonexistent" OMARCHY_PLATFORM_DEVICES="$acpi" omarchy-hw-cix-sky1 ||
+  fail "omarchy-hw-cix-sky1 matches an MS-R1"
+pass "omarchy-hw-cix-sky1 matches an MS-R1"
+
+OMARCHY_ARCH=aarch64 OMARCHY_DEVICETREE="$pi4" OMARCHY_PLATFORM_DEVICES="$test_tmp/no-acpi" omarchy-hw-cix-sky1 &&
+  fail "omarchy-hw-cix-sky1 rejects a Pi"
+pass "omarchy-hw-cix-sky1 rejects a Pi"
 
 # The predicates are what the install leaves and the Hyprland profile branch
 # on, so an x86 machine must never reach an ARM code path.

@@ -7,10 +7,11 @@ covers only what differs.
 ## Which machine is this?
 
 ```bash
-omarchy hw platform          # apple-silicon | raspberry-pi-5 | raspberry-pi | generic-aarch64 | x86_64
+omarchy hw platform          # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | generic-aarch64 | x86_64
 omarchy hw aarch64           # exit 0 on 64-bit ARM
 omarchy hw apple silicon     # exit 0 on an M-series Mac, never on an Intel T2 Mac
 omarchy hw raspberry pi      # exit 0 on any Pi; --5 restricts to the Pi 5
+omarchy hw cix sky1          # exit 0 on a CIX Sky1 (Minisforum MS-R1, Radxa Orion O6)
 ```
 
 These read the flattened device tree (`/proc/device-tree`), so they work

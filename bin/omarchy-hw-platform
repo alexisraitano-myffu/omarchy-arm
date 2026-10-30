@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# omarchy:summary=Print the hardware platform Omarchy is running on (apple-silicon, raspberry-pi-5, raspberry-pi, generic-aarch64 or x86_64).
+# omarchy:summary=Print the hardware platform Omarchy is running on (apple-silicon, raspberry-pi-5, raspberry-pi, cix-sky1, generic-aarch64 or x86_64).
 # omarchy:examples=omarchy hw platform
 
 # Detection reads the flattened device tree, which is where every aarch64
@@ -35,6 +35,10 @@ case "$compatible " in
     echo "raspberry-pi"
     exit 0
     ;;
+  *"cix,sky1 "*)
+    echo "cix-sky1"
+    exit 0
+    ;;
 esac
 
 # Asahi kernels that predate the apple,arm-platform compatible still name the
@@ -53,5 +57,14 @@ case "$model" in
     exit 0
     ;;
 esac
+
+# ACPI-only boards have no device tree at all. The CIX Sky1 (CP8180/CD8180:
+# the Minisforum MS-R1, and the Radxa Orion O6 booted in ACPI mode) names its
+# display engines CIXH5010 in the DSDT, one platform device per output.
+platform_devices="${OMARCHY_PLATFORM_DEVICES:-/sys/bus/platform/devices}"
+if compgen -G "$platform_devices/CIXH5010:*" >/dev/null; then
+  echo "cix-sky1"
+  exit 0
+fi
 
 echo "generic-aarch64"

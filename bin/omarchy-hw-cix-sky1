@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# omarchy:summary=Detect whether the computer is built on the CIX Sky1 SoC (Minisforum MS-R1, Radxa Orion O6).
+
+[[ $(omarchy-hw-platform) == "cix-sky1" ]]
