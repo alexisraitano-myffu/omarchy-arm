@@ -8,21 +8,21 @@ confirm_reboot() {
   gum confirm "$1" && { omarchy-system-reboot; exit 0; }
 }
 
-running_kernel=$(uname -r)
-kernel_updated=true
+pacman_kernel_installed() {
+  local kernel
+  for kernel in /usr/lib/modules/*/vmlinuz; do
+    [[ -f $kernel ]] && pacman -Qo "$kernel" &>/dev/null && return 0
+  done
+  return 1
+}
 
-for kernel in /usr/lib/modules/*/vmlinuz; do
-  if [[ -f $kernel ]] && pacman -Qo "$kernel" &>/dev/null; then
-    installed_kernel=$(basename "$(dirname "$kernel")")
-
-    if [[ $installed_kernel == $running_kernel ]]; then
-      kernel_updated=false
-      break
-    fi
-  fi
-done
-
-if [[ $kernel_updated == "true" ]]; then
+# A kernel upgrade removes the running kernel's modules, so that is the signal.
+# Matching the running version against pacman-owned kernels instead fires on
+# every update for a kernel that is not pacman-owned (vendor or self-built,
+# common on ARM boards). Check kernel/ rather than the directory itself, which
+# can survive the upgrade holding stray files such as DKMS leftovers. A kernel
+# with no modules at all only counts when pacman manages a kernel here.
+if [[ ! -d /usr/lib/modules/$(uname -r)/kernel ]] && pacman_kernel_installed; then
   confirm_reboot "Linux kernel has been updated. Reboot?"
 elif [[ -f $HOME/.local/state/omarchy/reboot-required ]]; then
   confirm_reboot "Updates require reboot. Ready?"
