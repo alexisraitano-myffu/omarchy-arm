@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# NetworkManager sets Wi-Fi power save again at every connect (Omarchy's
+# wifi.powersave = 2 turns it off), so re-apply the power profile when a
+# wireless interface comes up.
+
+[[ $2 == "up" && -e /sys/class/net/$1/phy80211 ]] || exit 0
+/usr/bin/omarchy-powerprofiles-tune
