@@ -60,6 +60,19 @@ cat >"$stub_bin/sudo" <<'SH'
 printf 'sudo %s\n' "$*" >>"$STUB_CALLS"
 SH
 
+# The preflight mirror probe asks pacman which mirror it would actually use,
+# then fetches from it. Both halves are stubbed so the suite never depends on a
+# network, and so the offline path can be driven on demand.
+cat >"$stub_bin/pacman-conf" <<'SH'
+#!/bin/bash
+echo 'https://mirror.example/$arch/$repo'
+SH
+
+cat >"$stub_bin/curl" <<'SH'
+#!/bin/bash
+exit "${STUB_CURL_EXIT:-0}"
+SH
+
 chmod +x "$stub_bin"/*
 
 # Everything in the base list is "available" except the packages the manifests
@@ -82,6 +95,8 @@ run_install() {
   STUB_ARCH="${STUB_ARCH:-aarch64}" \
   STUB_REPO_LIST="$test_tmp/repo-list" \
   STUB_CALLS="$test_tmp/calls.log" \
+  STUB_CURL_EXIT="${STUB_CURL_EXIT:-0}" \
+  OMARCHY_NOW="${OMARCHY_NOW:-}" \
   OMARCHY_OS_RELEASE="$os_file" \
   OMARCHY_ARCH="${STUB_ARCH:-aarch64}" \
   OMARCHY_DEVICETREE="$test_tmp/dt" \
@@ -281,6 +296,30 @@ derivative=$(os_release "Manjaro ARM" manjaro-arm arch)
 output=$(run_install "$derivative" --dry-run) ||
   fail "install.sh accepts a distribution that declares arch in ID_LIKE" "$output"
 pass "install.sh accepts a distribution that declares arch in ID_LIKE"
+
+# The two preconditions install.sh cannot supply for itself. Both used to fail
+# deep into the run: the mirror partway through the package phase, the clock as
+# a wall of signature errors indistinguishable from the missing keyring the
+# preflight already has a message for.
+offline=$(STUB_CURL_EXIT=1 run_install "$arch_arm" --dry-run) &&
+  fail "install.sh refuses to start with the mirror unreachable" "$offline"
+grep -q "Cannot reach the pacman mirror" <<<"$offline" ||
+  fail "the offline refusal explains itself" "$offline"
+grep -q "mirror.example/aarch64/core" <<<"$offline" ||
+  fail "the offline refusal names the mirror pacman would have used" "$offline"
+grep -q "Package plan" <<<"$offline" &&
+  fail "the offline refusal lands before the package plan is printed" "$offline"
+pass "an unreachable mirror is refused in preflight, not mid-download"
+
+# A Raspberry Pi with no RTC battery boots at the epoch, which is what makes
+# this worth checking rather than assuming.
+skewed=$(OMARCHY_NOW=0 run_install "$arch_arm" --dry-run) &&
+  fail "install.sh refuses to start with the clock at the epoch" "$skewed"
+grep -q "before the newest commit in this checkout" <<<"$skewed" ||
+  fail "the clock refusal explains itself" "$skewed"
+grep -q "timedatectl set-ntp" <<<"$skewed" ||
+  fail "the clock refusal says how to fix it" "$skewed"
+pass "a clock that predates the checkout is refused before pacman sees it"
 
 [[ ! -s $test_tmp/calls.log ]] ||
   fail "no refusal path reaches sudo" "$(cat "$test_tmp/calls.log")"

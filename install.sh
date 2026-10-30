@@ -174,6 +174,56 @@ esac
 command -v pacman >/dev/null || die "pacman is not installed; this is not an Arch-based system."
 command -v sudo >/dev/null || die "sudo is not installed."
 
+# The two preconditions this installer cannot supply for itself.
+#
+# Both of them already fail the install; they just fail late and describe
+# themselves badly, which is the part worth fixing. Checking them here costs a
+# few seconds and happens before the sudo prompt below, so a refusal never asks
+# for a password it is about to throw away.
+#
+# Overridable so the test suite can drive both outcomes without a network and
+# without touching the clock of the machine running the tests.
+now="${OMARCHY_NOW:-$EPOCHSECONDS}"
+
+# Commit timestamps come from whoever made the commit, so they are the one date
+# on this machine that a wrong local clock cannot have written. A checkout that
+# is not a git clone leaves $clock_floor empty and the check is skipped rather
+# than invented.
+clock_floor=$(git -C "$CHECKOUT" log -1 --format=%ct 2>/dev/null) || clock_floor=""
+
+if [[ -n $clock_floor ]] && (( now < clock_floor )); then
+  die "This machine's clock reads $(date -d "@$now" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "@$now"),
+       which is before the newest commit in this checkout. A Raspberry Pi has no
+       RTC battery and boots at the epoch, and until the clock is right pacman
+       rejects every package signature -- the same error a missing keyring gives,
+       several minutes into the run.
+       Fix it first: sudo timedatectl set-ntp true"
+fi
+
+# Ask the mirror pacman is actually configured to use, rather than pinging some
+# unrelated host and calling that "online".
+mirror=$(pacman-conf --repo=core Server 2>/dev/null | head -1)
+mirror=${mirror//'$repo'/core}
+mirror=${mirror//'$arch'/$arch}
+
+if [[ -n $mirror ]]; then
+  if curl -fsS --max-time 10 -o /dev/null "$mirror/core.db"; then
+    ok "Mirror reachable"
+  else
+    die "Cannot reach the pacman mirror this machine is configured to use:
+       $mirror/core.db
+       install.sh downloads well over a hundred packages and cannot run offline.
+       Bring the network up first: nmcli device wifi connect <ssid>"
+  fi
+fi
+
+# Before the first sudo below, so the one password prompt this run needs lands
+# here rather than somewhere inside makepkg's output an hour from now.
+source "$CHECKOUT/install/arm/sudo-keepalive.sh"
+OMARCHY_ARM_DRY_RUN="$DRY_RUN" omarchy_arm_sudo_keepalive_start ||
+  die "sudo could not authenticate you, and this install needs it throughout."
+trap 'omarchy_arm_sudo_keepalive_stop' EXIT
+
 # A pacstrapped Arch Linux ARM system can arrive without its own keyring, in
 # which case every single package below would fail verification. Catch it here
 # rather than 200 signature errors into the install.
@@ -343,7 +393,7 @@ reload_guard() {
 }
 
 reload_guard pause
-trap 'reload_guard resume' EXIT
+trap 'reload_guard resume; omarchy_arm_sudo_keepalive_stop' EXIT
 
 
 if [[ $CHECKOUT == "$TARGET" ]]; then
@@ -510,6 +560,7 @@ step "Done"
 ########################################################################
 
 reload_guard resume
+omarchy_arm_sudo_keepalive_stop
 trap - EXIT
 
 

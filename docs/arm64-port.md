@@ -294,7 +294,10 @@ Seven test files cover this fork specifically, 106 assertions in all:
   have not drifted from the base package list.
 - `test/shell.d/arm64-keyboard-test.sh` -- layout detection from
   `/etc/vconsole.conf`, the X11 keymap and the console `KEYMAP`, including the
-  aliases that are not xkb layout names.
+  aliases that are not xkb layout names and the names that only look like one.
+- `test/shell.d/arm64-sudo-keepalive-test.sh` -- the sudo timestamp is primed
+  once before the first escalation, refreshed for the length of the run, and
+  stopped afterwards; a dry run authenticates nothing.
 - `test/shell.d/arm64-packages-test.sh` -- runs `omarchy-pkg-add` against a
   stubbed pacman: an x86-only app is refused with its reason before pacman is
   involved and without reaching the network, an AUR-buildable one is offered
@@ -349,7 +352,10 @@ the system already declares -- `XKBLAYOUT`, then the X11 keymap `localectl`
 writes, then the console `KEYMAP` reduced to its xkb layout -- and records it
 where Omarchy looks. Upstream's Lua is untouched. An unrecognised keymap is
 left alone rather than guessed at: a layout Hyprland rejects leaves a desktop
-with no working keyboard at all.
+with no working keyboard at all. Recognising one means asking
+xkeyboard-config's own `base.lst` whether the name is a layout, not deciding
+from its shape -- `en` is two letters, is no layout, and fails to compile into
+a keymap only once the lock screen is already refusing a correct password.
 
 The bare-compositor pair are the instructive ones. Both produced a broken desktop with a
 completely clean log, because nothing had failed: a compositor with no

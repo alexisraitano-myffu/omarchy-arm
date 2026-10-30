@@ -22,6 +22,11 @@
 OMARCHY_ARM_VCONSOLE="${OMARCHY_ARM_VCONSOLE:-/etc/vconsole.conf}"
 OMARCHY_ARM_X11_KEYMAP="${OMARCHY_ARM_X11_KEYMAP:-/etc/X11/xorg.conf.d/00-keyboard.conf}"
 
+# xkeyboard-config's own catalogue of layouts, which is the same data
+# libxkbcommon compiles a keymap out of. Overridable so the tests can drive a
+# fixture instead of whatever the machine running them happens to ship.
+OMARCHY_ARM_XKB_RULES="${OMARCHY_ARM_XKB_RULES:-/usr/share/X11/xkb/rules/base.lst}"
+
 # Console keymap names are not xkb layout names. Most differ only by a suffix
 # ("fr-latin9" -> "fr"), which the generic rule below handles; these are the
 # ones where the base name itself differs, or where the keymap implies a
@@ -55,6 +60,25 @@ omarchy_arm_x11_value() {
     "$OMARCHY_ARM_X11_KEYMAP" | head -1
 }
 
+# The layout section of the rules list is a block of "<name>  <description>"
+# lines between a "! layout" header and the next "!" header.
+omarchy_arm_xkb_layout_exists() {
+  local layout="$1"
+
+  if [[ ! -r $OMARCHY_ARM_XKB_RULES ]]; then
+    echo "$OMARCHY_ARM_XKB_RULES is missing, so no layout can be verified;" >&2
+    echo "leaving the shipped default. Install xkeyboard-config." >&2
+    return 1
+  fi
+
+  awk -v want="$layout" '
+    /^![[:space:]]*layout/ { in_layouts = 1; next }
+    /^!/ { in_layouts = 0 }
+    in_layouts && $1 == want { found = 1; exit }
+    END { exit !found }
+  ' "$OMARCHY_ARM_XKB_RULES"
+}
+
 omarchy_arm_keymap_to_xkb() {
   local keymap="$1" base alias_line alias_base alias_layout alias_variant
 
@@ -70,9 +94,14 @@ omarchy_arm_keymap_to_xkb() {
     fi
   done <<<"$OMARCHY_ARM_KEYMAP_ALIASES"
 
-  # An xkb layout is two or three letters. Anything else is a keymap this does
-  # not understand, and guessing would be worse than leaving the default.
-  if [[ $base =~ ^[a-z]{2,3}$ ]]; then
+  # Ask xkeyboard-config whether that name is a layout, rather than deciding
+  # from its shape. A console keymap can be two or three letters and still be
+  # no layout at all -- "en" is the one people reach for -- and a name that
+  # only looks right is worse than no name: libxkbcommon fails to compile the
+  # keymap, Hyprland comes up without one, and the lock screen then rejects a
+  # password that was typed correctly. Falling through leaves the shipped "us",
+  # which at least types.
+  if omarchy_arm_xkb_layout_exists "$base"; then
     printf '%s|\n' "$base"
   fi
 }
