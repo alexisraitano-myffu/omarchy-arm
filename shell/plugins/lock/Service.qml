@@ -34,7 +34,16 @@ Item {
   property bool strandedLock: false
   property bool strandedLockResolved: false
 
-  readonly property bool locked: lockRequested || sessionLock.locked || sessionLock.secure
+  // Quickshell 0.3.2 can drop WlSessionLock's locked to false on unlock without
+  // emitting lockStateChanged, which left a binding on sessionLock.locked stuck
+  // at true: every later lock request then looked redundant and was ignored.
+  // Mirror the lock's state here and resync it wherever it can change.
+  property bool sessionLockActive: false
+  readonly property bool locked: lockRequested || sessionLockActive
+
+  function syncSessionLock() {
+    sessionLockActive = sessionLock.locked || sessionLock.secure
+  }
   readonly property bool authenticating: authenticatingPassword || fingerprintAuthenticating
 
   function realScreenCount() {
@@ -74,6 +83,7 @@ Item {
     pendingSessionLock = false
     pendingSessionLockTimer.stop()
     sessionLock.locked = true
+    syncSessionLock()
   }
 
   // ext-session-lock outlives its client, and a restart carries no lock over, so
@@ -155,6 +165,8 @@ Item {
     resetAuthenticationState()
     idleBlankTimer.stop()
     sessionLock.locked = false
+    syncSessionLock()
+    Qt.callLater(syncSessionLock)
     logEvent("unlocked")
     runWake()
   }
@@ -233,6 +245,7 @@ Item {
     locked: false
 
     onSecureStateChanged: {
+      root.syncSessionLock()
       root.logEvent("secure=" + secure)
       if (secure) {
         root.pendingSessionLock = false
@@ -243,6 +256,7 @@ Item {
     }
 
     onLockStateChanged: {
+      root.syncSessionLock()
       root.logEvent("session-locked=" + locked)
 
       if (locked) {
