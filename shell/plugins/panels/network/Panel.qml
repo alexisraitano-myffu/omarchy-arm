@@ -1628,10 +1628,15 @@ Panel {
       function onConnectionFailed(reason) {
         // Background auto-connect retries fire this too; only reprompt for
         // the connect started from this panel. Checked before
-        // failNetworkAction, which clears the action state.
-        var ours = root.actionKind === "connect" && root.actionSsid === (row.net.ssid || "")
-        root.failNetworkAction(root.networkForSsid(row.net.ssid), reason)
-        if (ours && root.shouldRepromptPassphrase(reason, row.requiresCredentials)) root.openPasswordPrompt(row.net.ssid)
+        // failNetworkAction, which clears the action state. Its refresh()
+        // can destroy this delegate, after which `root` and `row` no longer
+        // resolve here, so everything needed afterwards is captured first.
+        var panel = root
+        var ssid = row.net.ssid || ""
+        var ours = panel.actionKind === "connect" && panel.actionSsid === ssid
+        var reprompt = ours && panel.shouldRepromptPassphrase(reason, row.requiresCredentials)
+        panel.failNetworkAction(panel.networkForSsid(ssid), reason)
+        if (reprompt) panel.openPasswordPrompt(ssid)
       }
       function onConnectedChanged() {
         if (row.net) root.checkActionCompletion(root.networkForSsid(row.net.ssid))
