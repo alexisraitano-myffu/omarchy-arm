@@ -182,7 +182,11 @@ echo "==> /etc/skel (seeds every new user)"
 place_tree "$OMARCHY_PATH/config" "$skel/.config"
 place_tree "$OMARCHY_PATH/applications" "$skel/.local/share/applications"
 place_tree "$OMARCHY_PATH/default/nautilus-python/extensions" "$skel/.local/share/nautilus-python/extensions"
-place_tree "$OMARCHY_PATH/default/hypr/toggles" "$skel/.local/state/omarchy/toggles/hypr"
+# Only flags.lua: a file in the toggle state directory means that toggle is on
+# (omarchy-hyprland-toggle copies a definition in to enable it), so seeding the
+# whole definitions tree started every user with no gaps, no borders and a 1:1
+# single-window aspect ratio.
+place 644 "$OMARCHY_PATH/default/hypr/toggles/flags.lua" "$skel/.local/state/omarchy/toggles/hypr/flags.lua"
 place 644 "$OMARCHY_PATH/default/tensaku/state.toml" "$skel/.local/state/tensaku/state.toml"
 place 644 "$OMARCHY_PATH/default/bashrc" "$skel/.bashrc"
 place 644 "$OMARCHY_PATH/logo.txt" "$skel/.config/omarchy/branding/about.txt"

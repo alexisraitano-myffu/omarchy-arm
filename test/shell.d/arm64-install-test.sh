@@ -171,6 +171,15 @@ grep -q '\[\[ \$rel == \*.omarchy-arm.bak \]\] && continue' "$ROOT/install/arm/s
   fail "seeding skips this installer's own backups"
 pass "backups never masquerade as shipped defaults"
 
+# A file in the hypr toggle state directory means that toggle is on, so seeding
+# the whole shipped toggles directory turned on window-no-gaps (no gaps, no
+# borders) and single-window-aspect-ratio for every user.
+! grep -q 'place_tree "\$OMARCHY_PATH/default/hypr/toggles"' "$ROOT/install/arm/settings.sh" ||
+  fail "only flags.lua is seeded into the hypr toggle state"
+grep -q 'default/hypr/toggles/flags.lua" "\$skel/.local/state/omarchy/toggles/hypr/flags.lua"' "$ROOT/install/arm/settings.sh" ||
+  fail "flags.lua is seeded into the hypr toggle state"
+pass "only flags.lua is seeded into the hypr toggle state"
+
 # omarchy-migrate looks for the migration file name with its extension. A
 # marker without it marks nothing, and all 84 shipped migrations replay on the
 # first login -- which only stayed hidden while --first-install was writing a
