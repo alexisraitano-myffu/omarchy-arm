@@ -7,4 +7,6 @@ Type=oneshot
 ExecStart=/usr/bin/omarchy-powerprofiles-tune
 
 [Install]
-WantedBy=multi-user.target
+# power-profiles-daemon orders itself after multi-user.target (0.30), so
+# multi-user.target cannot wait for this unit: the cycle makes systemd drop it.
+WantedBy=graphical.target
