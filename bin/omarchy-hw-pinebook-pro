@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# omarchy:summary=Detect whether the computer is a Pine64 Pinebook Pro.
+
+[[ $(omarchy-hw-platform) == "pinebook-pro" ]]

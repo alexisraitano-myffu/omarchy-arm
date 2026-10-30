@@ -59,8 +59,8 @@ Options:
   --link             Point the target at this checkout with a symlink instead
                      of copying it, for working on the fork itself
   --profile NAME     Override hardware detection: apple-silicon,
-                     raspberry-pi-5, raspberry-pi, cix-sky1 or
-                     generic-aarch64
+                     raspberry-pi-5, raspberry-pi, cix-sky1,
+                     pinebook-pro or generic-aarch64
   -h, --help         Show this message
 USAGE
 }
@@ -259,6 +259,9 @@ case "$platform" in
   cix-sky1)
     ok "Platform: CIX Sky1 (Minisforum MS-R1, Radxa Orion O6)"
     warn "On the vendor kernel the Mali GPU has no Mesa driver; Hyprland renders in software."
+    ;;
+  pinebook-pro)
+    ok "Platform: Pine64 Pinebook Pro (RK3399)"
     ;;
   generic-aarch64)
     ok "Platform: generic aarch64 (virtual machine or unrecognised board)"

@@ -197,7 +197,7 @@ and run everywhere; 3 are new and ARM-only. They are gated with
 upstream and keeps a machine's install log accounting for every step upstream
 would have run.
 
-Three ARM leaves were added, each self-gating on the detected platform the way
+Four ARM leaves were added, each self-gating on the detected platform the way
 upstream's leaves self-gate on PCI IDs and DMI strings:
 
 - `install/hardware/arm/vulkan.sh` -- `vulkan-asahi` on a Mac,
@@ -209,6 +209,9 @@ upstream's leaves self-gate on PCI IDs and DMI strings:
   hardware has no protection of its own.
 - `install/hardware/arm/raspberry-pi.sh` -- zram, because the Pi tops out at
   8 GB with no swap by default.
+- `install/hardware/arm/pinebook-pro.sh` -- a systemd sleep drop-in that
+  selects s2idle, because a deep resume on the Pinebook Pro hangs often enough
+  to cost a hard power-off.
 
 One leaf outside `install/hardware/` needed the same treatment:
 `install/config/snapper.sh`. Snapper is wired to limine on x86 -- the same
@@ -227,11 +230,12 @@ Five commands, reading the flattened device tree at `/proc/device-tree`,
 and on ACPI-only aarch64 machines the platform devices the firmware names:
 
 ```bash
-omarchy hw platform            # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | generic-aarch64 | x86_64
+omarchy hw platform            # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | pinebook-pro | generic-aarch64 | x86_64
 omarchy hw aarch64
 omarchy hw apple silicon
 omarchy hw raspberry pi [--5]
 omarchy hw cix sky1
+omarchy hw pinebook pro
 ```
 
 They cost nothing to call, work before any package is installed, and are what
@@ -441,6 +445,39 @@ community kernels (6.18 LTS, 7.0) carry `panthor` and the display drivers,
 and Mesa then drives the Mali-G720 itself. Nothing in this fork needs to
 change for that; the software-rendering switch steps aside when `panthor` is
 loaded.
+
+## What the Pinebook Pro added
+
+A Pine64 Pinebook Pro (RK3399, Mali-T860 on `panfrost`, 4 GB) on Arch Linux
+ARM's `linux-aarch64` kernel, installed with `install.sh` and then used as a
+daily laptop. It is the first machine here with a lid, a battery and a built-in
+keyboard, and most of what it found was in those three.
+
+| | |
+|---|---|
+| The bar and every panel render solid black while their click targets work | Qt 6.12 added a QtQuick `Color` singleton. An unversioned `import QtQuick` brings it in, and it shadows `qs.Commons`' `Color` for unqualified access whatever the import order, so every `Color.<token>` is undefined. Not ARM-specific: any machine on Qt 6.12. Fixed by pinning the shell's imports to `QtQuick 6.11` |
+| Windows have no borders and no gaps | `install/arm/settings.sh` seeded the whole of `default/hypr/toggles` into `/etc/skel`, and a file in the toggle state directory means that toggle is on, so `window-no-gaps` and `single-window-aspect-ratio` were on for every user. Fixed by seeding `flags.lua` alone |
+| New terminals type digits for `u i o j k l m` | the keyboard has an embedded keypad layer and Omarchy turns numlock on at login. `default/hypr/platform/pinebook-pro.lua` turns it off; the platform profile now loads after the input defaults so it can |
+| Closing the lid sometimes needs a hard power-off to recover | deep suspend: the log ends at `PM: suspend entry (deep)` and the kernel never resumes. s2idle woke every time it was tried, within a couple of seconds |
+| After the first unlock, the screen no longer locks before suspend | Quickshell 0.3.2 can drop `WlSessionLock.locked` to false without emitting `lockStateChanged`, which left the lock service's `locked` binding stuck at true: every later lock request was treated as redundant, and logind suspended after the 12 s wait with the session open. With the lid reopened inside that window, the machine then slept with the lid open and nothing left to wake it |
+| A wrong Wi-Fi password fails silently from the network panel | `failNetworkAction()` refreshes the list and destroys the row whose handler is still running, so the reprompt check threw on `root` being undefined |
+| `vulkan-virtio` and `vulkan-swrast` installed on real hardware | the board fell through to `generic-aarch64`, whose branch is meant for VMs. Midgard has no Mesa Vulkan driver, so the Pinebook Pro branch installs nothing |
+
+What the machine confirmed rather than found:
+
+- `omarchy-hw-platform` answers `pinebook-pro` on the real device tree
+  (`pine64,pinebook-pro`, `rockchip,rk3399`)
+- Hyprland 0.56 runs on `panfrost` through GLES 3.0 (it asks for 3.2 and falls
+  back), and the stock look holds up with blur off
+- NetworkManager on the `brcmfmac` radio, Bluetooth, audio, battery, backlight,
+  SDDM and ufw all work with no board-specific setup
+
+Installs that predate this profile can get the sleep fix without reinstalling:
+
+```bash
+sudo mkdir -p /etc/systemd/sleep.conf.d
+printf '[Sleep]\nMemorySleepMode=s2idle\n' | sudo tee /etc/systemd/sleep.conf.d/50-omarchy-pinebook-pro.conf
+```
 
 ## Validated on an aarch64 machine
 

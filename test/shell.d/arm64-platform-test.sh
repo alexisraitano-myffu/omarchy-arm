@@ -35,6 +35,11 @@ pi5=$(fixture pi5 "raspberrypi,5-model-b brcm,bcm2712" "Raspberry Pi 5 Model B R
 pi4=$(fixture pi4 "raspberrypi,4-model-b brcm,bcm2711" "Raspberry Pi 4 Model B Rev 1.4")
 mac=$(fixture mac "apple,j413 apple,t8112 apple,arm-platform" "Apple MacBook Air (13-inch, M2, 2022)")
 vm=$(fixture vm "linux,dummy-virt")
+pbp=$(fixture pbp "pine64,pinebook-pro rockchip,rk3399" "Pine64 Pinebook Pro")
+# A device tree that only names the machine in its model string.
+pbp_model=$(fixture pbp_model "rockchip,rk3399" "Pine64 Pinebook Pro")
+# Another RK3399 board must not be taken for a Pinebook Pro.
+rockpro=$(fixture rockpro "pine64,rockpro64-v2.1 pine64,rockpro64 rockchip,rk3399" "Pine64 RockPro64 v2.1")
 # An Asahi kernel old enough to predate the apple,arm-platform compatible.
 mac_old=$(fixture mac_old "apple,j274" "Apple Mac mini (M1, 2020)")
 
@@ -49,6 +54,17 @@ pass "an Apple Silicon Mac is recognised"
 
 [[ $(platform_of "$mac_old") == "apple-silicon" ]] || fail "a Mac is recognised from its model string alone" "$(platform_of "$mac_old")"
 pass "a Mac is recognised from its model string alone"
+
+[[ $(platform_of "$pbp") == "pinebook-pro" ]] || fail "a Pinebook Pro is recognised" "$(platform_of "$pbp")"
+pass "a Pinebook Pro is recognised"
+
+[[ $(platform_of "$pbp_model") == "pinebook-pro" ]] ||
+  fail "a Pinebook Pro is recognised from its model string alone" "$(platform_of "$pbp_model")"
+pass "a Pinebook Pro is recognised from its model string alone"
+
+[[ $(platform_of "$rockpro") == "generic-aarch64" ]] ||
+  fail "another RK3399 board is not taken for a Pinebook Pro" "$(platform_of "$rockpro")"
+pass "another RK3399 board is not taken for a Pinebook Pro"
 
 [[ $(platform_of "$vm") == "generic-aarch64" ]] || fail "an aarch64 VM falls through to generic" "$(platform_of "$vm")"
 pass "an aarch64 VM falls through to generic"
@@ -103,6 +119,12 @@ pass "omarchy-hw-apple-silicon matches an M-series Mac"
 OMARCHY_ARCH=x86_64 OMARCHY_DEVICETREE="$mac" omarchy-hw-apple-silicon &&
   fail "omarchy-hw-apple-silicon does not match an Intel T2 Mac"
 pass "omarchy-hw-apple-silicon does not match an Intel T2 Mac"
+
+OMARCHY_ARCH=aarch64 OMARCHY_DEVICETREE="$pbp" omarchy-hw-pinebook-pro ||
+  fail "omarchy-hw-pinebook-pro matches a Pinebook Pro"
+OMARCHY_ARCH=aarch64 OMARCHY_DEVICETREE="$rockpro" omarchy-hw-pinebook-pro &&
+  fail "omarchy-hw-pinebook-pro rejects another RK3399 board"
+pass "omarchy-hw-pinebook-pro matches only a Pinebook Pro"
 
 OMARCHY_ARCH=aarch64 OMARCHY_DEVICETREE="$pi4" omarchy-hw-raspberry-pi --5 &&
   fail "omarchy-hw-raspberry-pi --5 rejects an older Pi"

@@ -39,7 +39,7 @@ done
 pass "every x86-only hardware leaf is gated"
 
 for leaf in hardware/arm/vulkan.sh hardware/arm/apple-silicon.sh hardware/arm/raspberry-pi.sh \
-  hardware/arm/power-profiles.sh hardware/arm/cix-sky1.sh; do
+  hardware/arm/power-profiles.sh hardware/arm/cix-sky1.sh hardware/arm/pinebook-pro.sh; do
   grep -q "run_logged_arm \"\$OMARCHY_INSTALL/$leaf\"" "$all" ||
     fail "$leaf runs on aarch64 only"
   [[ -f $ROOT/install/$leaf ]] || fail "$leaf exists"
@@ -154,20 +154,32 @@ grep -q 'icons/hicolor/256x256/apps' "$ROOT/install/arm/settings.sh" ||
   fail "PNG icons go in a pixel-size directory, not scalable"
 pass "the installer leaves no stray backups and files icons by size"
 
-# The Hyprland profile has to load after Omarchy's own look'n'feel or it would
-# be overwritten by it, and before the user's, or it would overwrite theirs.
+# The Hyprland profile has to load after Omarchy's own look'n'feel and input
+# defaults or it would be overwritten by them, and before the user's, or it
+# would overwrite theirs.
 omarchy_lua="$ROOT/default/hypr/omarchy.lua"
 looknfeel_line=$(grep -n 'require("default.hypr.looknfeel")' "$omarchy_lua" | cut -d: -f1)
 platform_line=$(grep -n 'require("default.hypr.platform")' "$omarchy_lua" | cut -d: -f1)
 [[ -n $looknfeel_line && -n $platform_line ]] || fail "both modules are required from omarchy.lua"
 (( platform_line > looknfeel_line )) ||
   fail "the platform profile loads after Omarchy's look'n'feel" "looknfeel:$looknfeel_line platform:$platform_line"
-pass "the platform profile loads after Omarchy's look'n'feel"
+input_line=$(grep -n 'require("default.hypr.input")' "$omarchy_lua" | cut -d: -f1)
+[[ -n $input_line ]] || fail "the input defaults are required from omarchy.lua"
+(( platform_line > input_line )) ||
+  fail "the platform profile loads after Omarchy's input defaults" "input:$input_line platform:$platform_line"
+pass "the platform profile loads after Omarchy's look'n'feel and input defaults"
 
 [[ -f $ROOT/default/hypr/platform/raspberry-pi.lua ]] || fail "the Pi profile exists"
 grep -q 'enabled = false' "$ROOT/default/hypr/platform/raspberry-pi.lua" ||
   fail "the Pi profile turns animations off"
 pass "the Pi profile exists and turns animations off"
+
+[[ -f $ROOT/default/hypr/platform/pinebook-pro.lua ]] || fail "the Pinebook Pro profile exists"
+grep -q 'numlock_by_default = false' "$ROOT/default/hypr/platform/pinebook-pro.lua" ||
+  fail "the Pinebook Pro profile turns numlock off"
+grep -q 'default.hypr.platform.pinebook-pro' "$ROOT/default/hypr/platform.lua" ||
+  fail "the Pinebook Pro profile is loaded on a Pinebook Pro"
+pass "the Pinebook Pro profile exists and turns numlock off"
 
 # Manifests are only useful if every entry is a real base package.
 base=$(sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$ROOT/install/omarchy-base.packages")

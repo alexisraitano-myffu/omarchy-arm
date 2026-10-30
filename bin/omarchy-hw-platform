@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# omarchy:summary=Print the hardware platform Omarchy is running on (apple-silicon, raspberry-pi-5, raspberry-pi, cix-sky1, generic-aarch64 or x86_64).
+# omarchy:summary=Print the hardware platform Omarchy is running on (apple-silicon, raspberry-pi-5, raspberry-pi, cix-sky1, pinebook-pro, generic-aarch64 or x86_64).
 # omarchy:examples=omarchy hw platform
 
 # Detection reads the flattened device tree, which is where every aarch64
@@ -39,6 +39,10 @@ case "$compatible " in
     echo "cix-sky1"
     exit 0
     ;;
+  *"pine64,pinebook-pro "*)
+    echo "pinebook-pro"
+    exit 0
+    ;;
 esac
 
 # Asahi kernels that predate the apple,arm-platform compatible still name the
@@ -54,6 +58,10 @@ case "$model" in
     ;;
   "Raspberry Pi"*)
     echo "raspberry-pi"
+    exit 0
+    ;;
+  "Pine64 Pinebook Pro"*)
+    echo "pinebook-pro"
     exit 0
     ;;
 esac

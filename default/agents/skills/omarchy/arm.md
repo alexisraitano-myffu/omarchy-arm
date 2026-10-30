@@ -1,17 +1,18 @@
 # ARM64 (aarch64)
 
-Read this when the machine is an Apple Silicon Mac, a Raspberry Pi, or any
-other aarch64 board. Everything in the other guides still applies; this one
+Read this when the machine is an Apple Silicon Mac, a Raspberry Pi, a
+Pinebook Pro, or any other aarch64 board. Everything in the other guides still applies; this one
 covers only what differs.
 
 ## Which machine is this?
 
 ```bash
-omarchy hw platform          # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | generic-aarch64 | x86_64
+omarchy hw platform          # apple-silicon | raspberry-pi-5 | raspberry-pi | cix-sky1 | pinebook-pro | generic-aarch64 | x86_64
 omarchy hw aarch64           # exit 0 on 64-bit ARM
 omarchy hw apple silicon     # exit 0 on an M-series Mac, never on an Intel T2 Mac
 omarchy hw raspberry pi      # exit 0 on any Pi; --5 restricts to the Pi 5
 omarchy hw cix sky1          # exit 0 on a CIX Sky1 (Minisforum MS-R1, Radxa Orion O6)
+omarchy hw pinebook pro      # exit 0 on a Pine64 Pinebook Pro
 ```
 
 These read the flattened device tree (`/proc/device-tree`), so they work
@@ -43,6 +44,13 @@ hl.config({ animations = { enabled = true } })
 
 Never edit `default/hypr/platform/raspberry-pi.lua` itself: it lives under
 `$OMARCHY_PATH`, which an update overwrites.
+
+On a Pinebook Pro, `default/hypr/platform/pinebook-pro.lua` turns numlock off
+at login: the keyboard's embedded keypad layer otherwise turns `u i o j k l m`
+into digits. `~/.config/hypr/input.lua` loads after it and wins. Suspend uses
+s2idle through `/etc/systemd/sleep.conf.d/50-omarchy-pinebook-pro.conf`,
+because a deep resume on this board can hang; delete that file to go back to
+deep sleep.
 
 ## Installing packages and apps
 
