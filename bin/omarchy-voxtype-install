@@ -8,7 +8,21 @@ set -e
 # Install voxtype and configure it for use.
 
 if gum confirm "Install Voxtype + AI model (~150MB) to enable dictation?"; then
-  omarchy-pkg-add wtype voxtype-bin
+  omarchy-pkg-add wtype
+
+  # gtk4-layer-shell is only an optdepend of voxtype-bin, but without it the
+  # OSD child exits at daemon start and Voxtype gives up on the OSD. Dictation
+  # works without the OSD, so a missing build must not stop the install.
+  omarchy-pkg-add gtk4-layer-shell || true
+
+  # On aarch64 voxtype-bin comes only from the AUR. It is a prebuilt download,
+  # not a source build, so skip omarchy-pkg-add's build prompt (and its exit 90
+  # when there is no terminal to ask in) and fetch it directly.
+  if [[ $(uname -m) == aarch64 ]]; then
+    omarchy-pkg-aur-add voxtype-bin
+  else
+    omarchy-pkg-add voxtype-bin
+  fi
 
   # Setup voxtype
   mkdir -p ~/.config/voxtype
