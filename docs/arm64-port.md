@@ -328,6 +328,7 @@ session, to an app someone tried to install afterwards, or to the next update:
 | `--first-install` makes `omarchy-provision-user` claim to be the ISO chroot | user setup failed looking for tarballs under `/opt/packages` |
 | Migration markers written without their `.sh` extension | all 84 shipped migrations would have replayed on first login |
 | `omarchy-screensaver` respawns `ttfx` in a loop | with `ttfx` absent the loop spins a core and floods the terminal with `command not found`, and the window it opens and closes reads to the idle service as a dismissal, cancelling the pending lock |
+| SDDM has no last user on a machine the ISO never installed | the greeter asks only for a password and logs in as `""`; every password fails with `User not known to the underlying authentication module`, which reads like a typo. The ISO seeds `/var/lib/sddm/state.conf`; `install/arm/login.sh` now does the same (found on an aarch64 VM under Parallels) |
 | The Install menu offers x86-only apps | `pacman` can only answer `target not found`, which reads like a broken install rather than an app that was never built for the machine |
 | Rerunning the installer re-seeds `/etc/skel` over the home | all 152 shipped defaults copied over the user's home again. The per-file backup is written once, so anything edited after the first install was destroyed with nothing left to recover it |
 | Deploy emptied `$OMARCHY_PATH` before refilling it | for the length of a 1600-file copy, Hyprland's `bootstrap.lua` and all 439 commands in `/usr/bin` pointed at nothing |
